@@ -153,7 +153,7 @@ class App(QWidget):
         top_layout.addWidget(self.url_input)
 
         self.format_combo = QComboBox(self)
-        self.format_combo.addItems(["MP4", "MP3"])
+        self.format_combo.addItems(["MP4", "MOV", "AVI", "WMV", "FLV", "WEBM", "MP3", "WAV", "M4A", "FLAC"])
         top_layout.addWidget(self.format_combo)
         self.layout.addLayout(top_layout)
 
