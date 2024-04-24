@@ -1,0 +1,4 @@
+youtube_dl
+Pyqt5
+pytube
+win10toast

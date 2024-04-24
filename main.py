@@ -23,9 +23,12 @@ class WorkerSignals(QObject):
 
 
 class Worker(QRunnable):
+    downloading_urls = []
+
     def __init__(self, url, format, save_path):
         super().__init__()
         self.url = url
+        Worker.downloading_urls.append(url)
         self.format = format
         self.save_path = save_path
         self.is_cancelled = False
@@ -66,6 +69,7 @@ class Worker(QRunnable):
         except Exception as e:
             print(e.with_traceback())
             self.signals.download_error.emit(str(e))
+        Worker.downloading_urls.remove(self.url)
 
     def progress_hook(self, video_stream, total_size, bytes_remaining):
         total_size = video_stream.filesize
@@ -209,6 +213,9 @@ class App(QWidget):
 
         if not self.settings['save_path']:
             self.path_label.setText("Please select a save folder")
+            return
+        if url in Worker.downloading_urls:
+            print("url is already being downloaded !")
             return
 
         format = self.format_combo.currentText().lower()
