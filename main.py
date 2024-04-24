@@ -11,7 +11,6 @@ from PyQt5.QtWidgets import (QApplication, QWidget, QVBoxLayout, QPushButton, QL
 from pytube import YouTube
 from pytube import request
 from win10toast import ToastNotifier
-import os
 
 cgitb.enable(format='text')
 toast = ToastNotifier()
@@ -24,9 +23,12 @@ class WorkerSignals(QObject):
 
 
 class Worker(QRunnable):
+    downloading_urls = []
+
     def __init__(self, url, format, save_path):
         super().__init__()
         self.url = url
+        Worker.downloading_urls.append(url)
         self.format = format
         self.save_path = save_path
         self.is_cancelled = False
@@ -57,15 +59,7 @@ class Worker(QRunnable):
                         break
             self.signals.download_complete.emit()
             while toast.notification_active(): time.sleep(0.1)
-            if self.is_cancelled:
-                # Supprimer le fichier si le téléchargement est annulé
-                os.remove(self.save_path + "\\" + yt.title + "." + self.format)
-                toast.show_toast("Download cancelled", "Video '" + yt.title + "' download was cancelled",
-                                 icon_path="icon.ico",
-                                 duration=10,
-                                 threaded=True)
-            else:
-                toast.show_toast("Download complete",
+            toast.show_toast("Download complete",
                              "Video '" + yt.title + "' was downloaded in " + self.format + " format",
                              icon_path="icon.ico",
                              duration=10,
@@ -75,6 +69,7 @@ class Worker(QRunnable):
         except Exception as e:
             print(e.with_traceback())
             self.signals.download_error.emit(str(e))
+        Worker.downloading_urls.remove(self.url)
 
     def progress_hook(self, video_stream, total_size, bytes_remaining):
         total_size = video_stream.filesize
@@ -84,7 +79,8 @@ class Worker(QRunnable):
 
     def cancel(self):
         self.is_cancelled = True
-        
+
+
 class DownloadWidget(QWidget):
     cancel_signal = pyqtSignal(str)
 
@@ -118,20 +114,16 @@ class DownloadWidget(QWidget):
         layout.addWidget(self.progress)
 
         # Bouton d'annulation
-        self.cancel_button = QPushButton('X', self)
-        self.cancel_button.clicked.connect(self.cancel_download)
-        layout.addWidget(self.cancel_button)
+        cancel_button = QPushButton('X', self)
+        cancel_button.clicked.connect(self.cancel_download)
+        layout.addWidget(cancel_button)
 
         self.setLayout(layout)
 
     def cancel_download(self):
         try:
             self.cancel_signal.emit(self.url)  # Envoie un signal pour annuler le téléchargement
-            self.layout.removeWidget(self.progress)  # Supprime le widget de la mise en page
-            self.layout.removeWidget(self.video_label)  # Supprime le widget de la mise en page
-            self.layout.removeWidget(self.cancel_button)  # Supprime le widget de la mise en page
-            self.layout.removeWidget(self)  # Supprime le widget de la mise en page
-            self.deleteLater()  # Supprime le widget de la mémoire
+            self.layout.removeWidget(self)
         except Exception as e:
             print(e)
 
@@ -152,9 +144,9 @@ class DownloadWidget(QWidget):
 class App(QWidget):
     def __init__(self):
         super().__init__()
+
         self.load_settings()
         self.initUI()
-        self.workers = []
 
     def initUI(self):
         self.layout = QVBoxLayout(self)
@@ -210,11 +202,9 @@ class App(QWidget):
         self.save_settings()
 
     def cancel_download(self, url):
-        for worker in self.workers: # Parcourir tous les travailleurs pour trouver celui qui correspond à l'URL
-            if worker.url == url:
-                worker.cancel()
-        
-        
+        # Ajouter la logique pour annuler un téléchargement
+        pass
+
     def start_download(self):
         url = self.url_input.text()
         if url.strip() == "":
@@ -223,6 +213,9 @@ class App(QWidget):
 
         if not self.settings['save_path']:
             self.path_label.setText("Please select a save folder")
+            return
+        if url in Worker.downloading_urls:
+            print("url is already being downloaded !")
             return
 
         format = self.format_combo.currentText().lower()
@@ -239,7 +232,6 @@ class App(QWidget):
             # Handle error
             return
         worker = Worker(url, format, save_path)
-        self.workers.append(worker)
         worker.signals.progress_updated.connect(download_widget.update_progress)
         worker.signals.download_complete.connect(lambda: download_widget.update_progress(100))
         worker.signals.download_error.connect(self.handle_download_error)
