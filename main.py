@@ -56,7 +56,7 @@ class Worker(QRunnable):
                         out_file.write(chunk)
                         downloaded += len(chunk)
                         percent = downloaded / filesize
-                        self.signals.progress_updated.emit(percent * 100)
+                        self.signals.progress_updated.emit(int(percent * 100))
                     else:
                         break
             self.signals.download_complete.emit()
@@ -102,11 +102,11 @@ class DownloadWidget(QWidget):
 
         # Nom de la vidéo
         self.video_label = QLabel(video_name)  # Ici, on pourrait extraire le titre avec youtube_dl si nécessaire
-        self.video_label.setFixedWidth(self.width() * 0.5)  # 50% de la largeur du parent
+        self.video_label.setFixedWidth(int(self.width() * 0.5))  # 50% de la largeur du parent
         self.video_label.setFixedHeight(60)
 
         # Connecter le signal 'resized' du QWidget parent à une fonction pour ajuster la largeur du QLabel
-        self.resized.connect(lambda: self.video_label.setFixedWidth(self.width() * 0.5))
+        self.resized.connect(lambda: self.video_label.setFixedWidth(int(self.width() * 0.5)))
         self.video_label.setWordWrap(False)
         layout.addWidget(self.video_label)
 
