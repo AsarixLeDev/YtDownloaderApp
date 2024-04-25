@@ -1,11 +1,13 @@
 import cgitb
 import json
 import logging
+import os
 import sys
 import time
 
 import youtube_dl
 from PyQt5.QtCore import pyqtSignal, QObject, QThreadPool, QRunnable, pyqtSlot
+from PyQt5.QtGui import QIcon
 from PyQt5.QtWidgets import (QApplication, QWidget, QVBoxLayout, QPushButton, QLineEdit, QLabel, QFileDialog,
                              QHBoxLayout, QComboBox, QProgressBar, QScrollArea)
 from pytube import YouTube
@@ -61,7 +63,7 @@ class Worker(QRunnable):
             while toast.notification_active(): time.sleep(0.1)
             toast.show_toast("Download complete",
                              "Video '" + yt.title + "' was downloaded in " + self.format + " format",
-                             icon_path="icon.ico",
+                             icon_path=icon_path,
                              duration=10,
                              threaded=True)
         except youtube_dl.utils.DownloadError as e:
@@ -187,6 +189,7 @@ class App(QWidget):
         print("Multithreading with maximum %d threads" % self.threadpool.maxThreadCount())
 
         self.setWindowTitle('YouTube Downloader')
+        self.setWindowIcon(QIcon(icon_path))
         self.setMinimumSize(1000, 500)
         self.apply_theme()
 
@@ -243,13 +246,13 @@ class App(QWidget):
 
     def load_settings(self):
         try:
-            with open('settings.json', 'r') as f:
+            with open(setting_path, 'r') as f:
                 self.settings = json.load(f)
         except (FileNotFoundError, json.JSONDecodeError):
             self.settings = {'dark_mode': False, 'save_path': '', 'counts': {'mp3': 0, 'mp4': 0, 'total': 0}}
 
     def save_settings(self):
-        with open('settings.json', 'w') as f:
+        with open(setting_path, 'w') as f:
             json.dump(self.settings, f)
 
     def toggle_theme(self):
@@ -293,7 +296,7 @@ class App(QWidget):
                 background-color: {bhover_color};
             }}
             QComboBox::down-arrow {{
-                image: url(img.png);
+                image: url({arrow_path});
                 width: 10px;
                 height: 10px;
                 margin: auto;
@@ -328,8 +331,27 @@ class App(QWidget):
             self.theme_button.setText("Switch to Dark Mode")
 
 
+def load_data():
+    if getattr(sys, 'frozen', False):
+        # Si l'application est exécutée en tant qu'exécutable OneFile.
+        base_path = sys._MEIPASS
+    else:
+        # Si l'application est exécutée normalement (par exemple pendant le développement).
+        base_path = os.path.dirname(__file__)
+    setting_path = os.path.join(base_path, 'settings.json')
+    icon_path = os.path.join(base_path, 'icon.ico')
+    arrow_path = os.path.join(base_path, 'img.png')
+    return setting_path, icon_path, arrow_path
+
+
 if __name__ == '__main__':
+    global setting_path, icon_path, arrow_path
+    setting_path, icon_path, arrow_path = load_data()
+    print("setting_path", setting_path)
+    print("icon_path", icon_path)
+    print("arrow_path", arrow_path)
     app = QApplication(sys.argv)
+    app.setWindowIcon(QIcon(icon_path))
     ex = App()
     ex.show()
     sys.exit(app.exec_())
