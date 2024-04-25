@@ -39,7 +39,7 @@ class Worker(QRunnable):
     @pyqtSlot()
     def run(self):
         try:
-            yt = YouTube(self.url, on_progress_callback=self.progress_hook)
+            yt = YouTube(self.url)
             if self.format == "mp3":
                 stream = yt.streams.get_audio_only()
             else:
@@ -80,12 +80,6 @@ class Worker(QRunnable):
             print(e.with_traceback())
             self.signals.download_error.emit(str(e))
         Worker.downloading_urls.remove(self.url)
-
-    def progress_hook(self, video_stream, total_size, bytes_remaining):
-        total_size = video_stream.filesize
-        bytes_downloaded = total_size - bytes_remaining
-        percent = (bytes_downloaded / total_size) * 100
-        self.signals.progress_updated.emit(percent)
 
     def cancel(self):
         self.is_cancelled = True
