@@ -61,11 +61,19 @@ class Worker(QRunnable):
                         break
             self.signals.download_complete.emit()
             while toast.notification_active(): time.sleep(0.1)
-            toast.show_toast("Download complete",
-                             "Video '" + yt.title + "' was downloaded in " + self.format + " format",
-                             icon_path=icon_path,
-                             duration=10,
-                             threaded=True)
+            if self.is_cancelled:
+                # Supprimer le fichier si le téléchargement est annulé
+                os.remove(self.save_path + "\\" + yt.title + "." + self.format)
+                toast.show_toast("Download cancelled", "Video '" + yt.title + "' download was cancelled",
+                                 icon_path="icon.ico",
+                                 duration=10,
+                                 threaded=True)
+            else:
+                toast.show_toast("Download complete",
+                                 "Video '" + yt.title + "' was downloaded in " + self.format + " format",
+                                 icon_path=icon_path,
+                                 duration=10,
+                                 threaded=True)
         except youtube_dl.utils.DownloadError as e:
             self.signals.download_error.emit("(pytube) " + str(e))
         except Exception as e:
@@ -116,16 +124,20 @@ class DownloadWidget(QWidget):
         layout.addWidget(self.progress)
 
         # Bouton d'annulation
-        cancel_button = QPushButton('X', self)
-        cancel_button.clicked.connect(self.cancel_download)
-        layout.addWidget(cancel_button)
+        self.cancel_button = QPushButton('X', self)
+        self.cancel_button.clicked.connect(self.cancel_download)
+        layout.addWidget(self.cancel_button)
 
         self.setLayout(layout)
 
     def cancel_download(self):
         try:
             self.cancel_signal.emit(self.url)  # Envoie un signal pour annuler le téléchargement
-            self.layout.removeWidget(self)
+            self.layout.removeWidget(self.progress)  # Supprime le widget de la mise en page
+            self.layout.removeWidget(self.video_label)  # Supprime le widget de la mise en page
+            self.layout.removeWidget(self.cancel_button)  # Supprime le widget de la mise en page
+            self.layout.removeWidget(self)  # Supprime le widget de la mise en page
+            self.deleteLater()  # Supprime le widget de la mémoire
         except Exception as e:
             print(e)
 
@@ -149,6 +161,7 @@ class App(QWidget):
 
         self.load_settings()
         self.initUI()
+        self.workers = []
 
     def initUI(self):
         self.layout = QVBoxLayout(self)
@@ -205,8 +218,9 @@ class App(QWidget):
         self.save_settings()
 
     def cancel_download(self, url):
-        # Ajouter la logique pour annuler un téléchargement
-        pass
+        for worker in self.workers:  # Parcourir tous les travailleurs pour trouver celui qui correspond à l'URL
+            if worker.url == url:
+                worker.cancel()
 
     def start_download(self):
         url = self.url_input.text()
@@ -235,6 +249,7 @@ class App(QWidget):
             # Handle error
             return
         worker = Worker(url, format, save_path)
+        self.workers.append(worker)
         worker.signals.progress_updated.connect(download_widget.update_progress)
         worker.signals.download_complete.connect(lambda: download_widget.update_progress(100))
         worker.signals.download_error.connect(self.handle_download_error)
