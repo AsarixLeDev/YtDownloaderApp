@@ -4,6 +4,7 @@ import logging
 import os
 import sys
 import time
+import funcs as f
 
 import youtube_dl
 from PyQt5.QtCore import pyqtSignal, QObject, QThreadPool, QRunnable, pyqtSlot
@@ -39,13 +40,14 @@ class Worker(QRunnable):
     @pyqtSlot()
     def run(self):
         try:
-            yt = YouTube(self.url)
-            if self.format == "mp3":
+            yt = YouTube(self.url, on_progress_callback=self.progress_hook)
+            if self.format == "mp3" or self.format == "flac" or self.format == "wav" or self.format == "m4a":
                 stream = yt.streams.get_audio_only()
             else:
                 stream = yt.streams.get_highest_resolution()
             filesize = stream.filesize  # get the video size
-            with open(self.save_path + "\\" + yt.title + "." + self.format, 'wb') as out_file:
+            title = f.normalize_title(yt.title) + "." + self.format
+            with open(self.save_path + "\\" + title, 'wb') as out_file:
                 stream = request.stream(stream.url)  # get an iterable stream
                 downloaded = 0
                 while True:
@@ -77,7 +79,7 @@ class Worker(QRunnable):
         except youtube_dl.utils.DownloadError as e:
             self.signals.download_error.emit("(pytube) " + str(e))
         except Exception as e:
-            print(e.with_traceback())
+            print(e)
             self.signals.download_error.emit(str(e))
         Worker.downloading_urls.remove(self.url)
 
@@ -166,7 +168,7 @@ class App(QWidget):
         top_layout.addWidget(self.url_input)
 
         self.format_combo = QComboBox(self)
-        self.format_combo.addItems(["MP4", "MP3"])
+        self.format_combo.addItems(["MP4", "MOV", "AVI", "WMV", "FLV", "WEBM", "MP3", "WAV", "M4A", "FLAC"])
         top_layout.addWidget(self.format_combo)
         self.layout.addLayout(top_layout)
 
