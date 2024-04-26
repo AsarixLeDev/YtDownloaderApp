@@ -1,12 +1,14 @@
 import cgitb
 import json
 import logging
+import os
 import sys
 import time
 import funcs as f
 
 import youtube_dl
 from PyQt5.QtCore import pyqtSignal, QObject, QThreadPool, QRunnable, pyqtSlot
+from PyQt5.QtGui import QIcon
 from PyQt5.QtWidgets import (QApplication, QWidget, QVBoxLayout, QPushButton, QLineEdit, QLabel, QFileDialog,
                              QHBoxLayout, QComboBox, QProgressBar, QScrollArea)
 from pytube import YouTube
@@ -56,28 +58,30 @@ class Worker(QRunnable):
                         out_file.write(chunk)
                         downloaded += len(chunk)
                         percent = downloaded / filesize
-                        self.signals.progress_updated.emit(percent * 100)
+                        self.signals.progress_updated.emit(int(percent * 100))
                     else:
                         break
             self.signals.download_complete.emit()
             while toast.notification_active(): time.sleep(0.1)
-            toast.show_toast("Download complete",
-                             "Video '" + yt.title + "' was downloaded in " + self.format + " format",
-                             icon_path="icon.ico",
-                             duration=10,
-                             threaded=True)
+            if self.is_cancelled:
+                # Supprimer le fichier si le téléchargement est annulé
+                os.remove(self.save_path + "\\" + yt.title + "." + self.format)
+                toast.show_toast("Download cancelled", "Video '" + yt.title + "' download was cancelled",
+                                 icon_path="icon.ico",
+                                 duration=10,
+                                 threaded=True)
+            else:
+                toast.show_toast("Download complete",
+                                 "Video '" + yt.title + "' was downloaded in " + self.format + " format",
+                                 icon_path=icon_path,
+                                 duration=10,
+                                 threaded=True)
         except youtube_dl.utils.DownloadError as e:
             self.signals.download_error.emit("(pytube) " + str(e))
         except Exception as e:
             print(e)
             self.signals.download_error.emit(str(e))
         Worker.downloading_urls.remove(self.url)
-
-    def progress_hook(self, video_stream, total_size, bytes_remaining):
-        total_size = video_stream.filesize
-        bytes_downloaded = total_size - bytes_remaining
-        percent = (bytes_downloaded / total_size) * 100
-        self.signals.progress_updated.emit(percent)
 
     def cancel(self):
         self.is_cancelled = True
@@ -102,11 +106,11 @@ class DownloadWidget(QWidget):
 
         # Nom de la vidéo
         self.video_label = QLabel(video_name)  # Ici, on pourrait extraire le titre avec youtube_dl si nécessaire
-        self.video_label.setFixedWidth(self.width() * 0.5)  # 50% de la largeur du parent
+        self.video_label.setFixedWidth(int(self.width() * 0.5))  # 50% de la largeur du parent
         self.video_label.setFixedHeight(60)
 
         # Connecter le signal 'resized' du QWidget parent à une fonction pour ajuster la largeur du QLabel
-        self.resized.connect(lambda: self.video_label.setFixedWidth(self.width() * 0.5))
+        self.resized.connect(lambda: self.video_label.setFixedWidth(int(self.width() * 0.5)))
         self.video_label.setWordWrap(False)
         layout.addWidget(self.video_label)
 
@@ -116,16 +120,20 @@ class DownloadWidget(QWidget):
         layout.addWidget(self.progress)
 
         # Bouton d'annulation
-        cancel_button = QPushButton('X', self)
-        cancel_button.clicked.connect(self.cancel_download)
-        layout.addWidget(cancel_button)
+        self.cancel_button = QPushButton('X', self)
+        self.cancel_button.clicked.connect(self.cancel_download)
+        layout.addWidget(self.cancel_button)
 
         self.setLayout(layout)
 
     def cancel_download(self):
         try:
             self.cancel_signal.emit(self.url)  # Envoie un signal pour annuler le téléchargement
-            self.layout.removeWidget(self)
+            self.layout.removeWidget(self.progress)  # Supprime le widget de la mise en page
+            self.layout.removeWidget(self.video_label)  # Supprime le widget de la mise en page
+            self.layout.removeWidget(self.cancel_button)  # Supprime le widget de la mise en page
+            self.layout.removeWidget(self)  # Supprime le widget de la mise en page
+            self.deleteLater()  # Supprime le widget de la mémoire
         except Exception as e:
             print(e)
 
@@ -149,6 +157,7 @@ class App(QWidget):
 
         self.load_settings()
         self.initUI()
+        self.workers = []
 
     def initUI(self):
         self.layout = QVBoxLayout(self)
@@ -189,6 +198,7 @@ class App(QWidget):
         print("Multithreading with maximum %d threads" % self.threadpool.maxThreadCount())
 
         self.setWindowTitle('YouTube Downloader')
+        self.setWindowIcon(QIcon(icon_path))
         self.setMinimumSize(1000, 500)
         self.apply_theme()
 
@@ -204,8 +214,9 @@ class App(QWidget):
         self.save_settings()
 
     def cancel_download(self, url):
-        # Ajouter la logique pour annuler un téléchargement
-        pass
+        for worker in self.workers:  # Parcourir tous les travailleurs pour trouver celui qui correspond à l'URL
+            if worker.url == url:
+                worker.cancel()
 
     def start_download(self):
         url = self.url_input.text()
@@ -234,6 +245,7 @@ class App(QWidget):
             # Handle error
             return
         worker = Worker(url, format, save_path)
+        self.workers.append(worker)
         worker.signals.progress_updated.connect(download_widget.update_progress)
         worker.signals.download_complete.connect(lambda: download_widget.update_progress(100))
         worker.signals.download_error.connect(self.handle_download_error)
@@ -245,13 +257,13 @@ class App(QWidget):
 
     def load_settings(self):
         try:
-            with open('settings.json', 'r') as f:
+            with open(setting_path, 'r') as f:
                 self.settings = json.load(f)
         except (FileNotFoundError, json.JSONDecodeError):
             self.settings = {'dark_mode': False, 'save_path': '', 'counts': {'mp3': 0, 'mp4': 0, 'total': 0}}
 
     def save_settings(self):
-        with open('settings.json', 'w') as f:
+        with open(setting_path, 'w') as f:
             json.dump(self.settings, f)
 
     def toggle_theme(self):
@@ -295,7 +307,7 @@ class App(QWidget):
                 background-color: {bhover_color};
             }}
             QComboBox::down-arrow {{
-                image: url(img.png);
+                image: url({arrow_path});
                 width: 10px;
                 height: 10px;
                 margin: auto;
@@ -330,8 +342,27 @@ class App(QWidget):
             self.theme_button.setText("Switch to Dark Mode")
 
 
+def load_data():
+    if getattr(sys, 'frozen', False):
+        # Si l'application est exécutée en tant qu'exécutable OneFile.
+        base_path = sys._MEIPASS
+    else:
+        # Si l'application est exécutée normalement (par exemple pendant le développement).
+        base_path = os.path.dirname(__file__)
+    setting_path = os.path.join(base_path, 'settings.json')
+    icon_path = os.path.join(base_path, 'icon.ico')
+    arrow_path = os.path.join(base_path, 'img.png')
+    return setting_path, icon_path, arrow_path
+
+
 if __name__ == '__main__':
+    global setting_path, icon_path, arrow_path
+    setting_path, icon_path, arrow_path = load_data()
+    print("setting_path", setting_path)
+    print("icon_path", icon_path)
+    print("arrow_path", arrow_path)
     app = QApplication(sys.argv)
+    app.setWindowIcon(QIcon(icon_path))
     ex = App()
     ex.show()
     sys.exit(app.exec_())
