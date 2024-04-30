@@ -46,7 +46,7 @@ class Worker(QRunnable):
             else:
                 stream = yt.streams.get_highest_resolution()
             filesize = stream.filesize  # get the video size
-            title = f.normalize_title(yt.title) + "." + self.format
+            title = f.sanitize_filename(yt.title, strict_cleaning=True) + "." + self.format
             with open(self.save_path + "\\" + title, 'wb') as out_file:
                 stream = request.stream(stream.url)  # get an iterable stream
                 downloaded = 0
