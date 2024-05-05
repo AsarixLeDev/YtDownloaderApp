@@ -15,9 +15,19 @@ from PyQt5.QtWidgets import (QApplication, QWidget, QVBoxLayout, QPushButton, QL
 from pytube import YouTube
 from pytube import request
 from win10toast import ToastNotifier
+from pytube.exceptions import RegexMatchError, VideoUnavailable
+from urllib.error import URLError, HTTPError
+import re
 
 cgitb.enable(format='text')
 toast = ToastNotifier()
+
+
+def show_toast(title, subtitle):
+    toast.show_toast(title, subtitle,
+                     icon_path=icon_path,
+                     duration=10,
+                     threaded=True)
 
 
 class WorkerSignals(QObject):
@@ -67,22 +77,57 @@ class Worker(QRunnable):
             if self.is_cancelled:
                 # Supprimer le fichier si le téléchargement est annulé
                 os.remove(self.save_path + "\\" + yt.title + "." + self.format)
-                toast.show_toast("Download cancelled", "Video '" + yt.title + "' download was cancelled",
-                                 icon_path="icon.ico",
-                                 duration=10,
-                                 threaded=True)
+                show_toast("Download cancelled", "Video '" + yt.title + "' download was cancelled")
             else:
-                toast.show_toast("Download complete",
-                                 "Video '" + yt.title + "' was downloaded in " + self.format + " format",
-                                 icon_path=icon_path,
-                                 duration=10,
-                                 threaded=True)
+                show_toast("Download complete",
+                           "Video '" + yt.title + "' was downloaded in " + self.format + " format")
+        except RegexMatchError:
+            show_toast("YouTube URL Parsing Error", "Failed to parse the provided YouTube URL due to incorrect format.")
+        except VideoUnavailable:
+            show_toast("YouTube Video Unavailable",
+                       "The requested video cannot be accessed, possibly due to restrictions or deletion.")
+        except (URLError, HTTPError) as e:
+            show_toast("Network Connection Error",
+                       "Failed to connect to YouTube due to a network issue or inaccessible server. "
+                       "Error's reason : " + str(e.reason))
+        except Exception as e:
+            show_toast("Unexpected Application Error",
+                       "An unspecified error occurred during operation, requiring further diagnosis.")
+            print(e)
         except youtube_dl.utils.DownloadError as e:
             self.signals.download_error.emit("(pytube) " + str(e))
         except Exception as e:
             print(e)
             self.signals.download_error.emit(str(e))
         Worker.downloading_urls.remove(self.url)
+
+    def download_youtube_video(url, path):
+        """Download a video from YouTube while handling common exceptions."""
+
+        # Check if the URL is a valid YouTube URL
+        if not re.match(r'^(https?://)?(www\.)?(youtube\.com|youtu\.?be)/', url):
+            return "Error: Invalid YouTube URL."
+
+        try:
+            # Create YouTube object
+            yt = YouTube(url)
+
+            # Select the first stream; if you need a specific stream, filter by mime_type, resolution, etc.
+            stream = yt.streams.first()
+
+            # Download the video
+            stream.download(output_path=path)
+
+            return "Download successful!"
+        except RegexMatchError:
+            return "Error: Failed to parse YouTube URL."
+        except VideoUnavailable:
+            return "Error: Video is unavailable."
+        except (URLError, HTTPError) as e:
+            return f"Network Error: {e.reason}"
+        except Exception as e:
+            # Catch-all for any other unforeseen errors
+            return f"An unexpected error occurred: {str(e)}"
 
     def cancel(self):
         self.is_cancelled = True
@@ -311,14 +356,17 @@ class App(QWidget):
     def start_download(self):
         url = self.url_input.text()
         if url.strip() == "":
-            self.path_label.setText("Please enter a URL")
+            show_toast("No URL", "No URL was provided. Please fill the text area.")
             return
-
+        if not re.match(r'^(https?://)?(www\.)?(youtube\.com|youtu\.?be)/', url):
+            show_toast("Invalid YouTube URL", "The URL you provided is not a YouTube URL.")
+            return
         if not self.settings['save_path']:
-            self.path_label.setText("Please select a save folder")
+            show_toast("No Save folder", "No save folder was provided. Please select one.")
             return
         if url in Worker.downloading_urls:
-            print("url is already being downloaded !")
+            show_toast("URL already being downloaded",
+                       "The url you specified is already being downloaded. Please wait !")
             return
 
         format = self.format_combo.currentText().lower()
@@ -331,9 +379,6 @@ class App(QWidget):
         url = download_widget.url
         format = download_widget.format
         save_path = self.settings['save_path']
-        if url.strip() == "":
-            # Handle error
-            return
         worker = Worker(url, format, save_path)
         self.workers.append(worker)
         worker.signals.progress_updated.connect(download_widget.update_progress)
@@ -342,6 +387,7 @@ class App(QWidget):
         self.threadpool.start(worker)
 
     def handle_download_error(self, error_message):
+        show_toast("Error", f"Error during download: {error_message}")
         logging.error(f"Error during download: {error_message}")
         # Update UI or notify user about the error
 

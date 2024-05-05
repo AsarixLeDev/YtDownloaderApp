@@ -27,9 +27,3 @@ def sanitize_filename(input_string, strict_cleaning=False):
         sanitized = '_' + sanitized
 
     return sanitized
-
-
-# Exemple d'utilisation avec l'option strict_cleaning activée
-input_name = "Exemple avec des espaces et des accents éèç@#"
-print("Nom de fichier original:", input_name)
-print("Nom de fichier sécurisé (nettoyage strict):", sanitize_filename(input_name, strict_cleaning=True))
