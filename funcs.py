@@ -1,5 +1,11 @@
 import re
+
 import unicodedata
+from win10toast import ToastNotifier
+
+from YtDownloaderApp.data import data
+
+toast = ToastNotifier()
 
 
 def sanitize_filename(input_string, strict_cleaning=False):
@@ -27,3 +33,14 @@ def sanitize_filename(input_string, strict_cleaning=False):
         sanitized = '_' + sanitized
 
     return sanitized
+
+
+def show_toast(title, subtitle):
+    toast.show_toast(title, subtitle,
+                     icon_path=data.icon_path,
+                     duration=10,
+                     threaded=True)
+
+
+def notification_active():
+    return toast.notification_active()
