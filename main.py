@@ -4,11 +4,12 @@ import logging
 import os
 import sys
 import time
+
 import funcs as f
 
 import youtube_dl
-from PyQt5.QtCore import pyqtSignal, QObject, QThreadPool, QRunnable, pyqtSlot
-from PyQt5.QtGui import QIcon
+from PyQt5.QtCore import pyqtSignal, QObject, QThreadPool, QRunnable, pyqtSlot, Qt
+from PyQt5.QtGui import QIcon, QFont
 from PyQt5.QtWidgets import (QApplication, QWidget, QVBoxLayout, QPushButton, QLineEdit, QLabel, QFileDialog,
                              QHBoxLayout, QComboBox, QProgressBar, QScrollArea)
 from pytube import YouTube
@@ -40,7 +41,7 @@ class Worker(QRunnable):
     @pyqtSlot()
     def run(self):
         try:
-            yt = YouTube(self.url, on_progress_callback=self.progress_hook)
+            yt = YouTube(self.url)
             if self.format == "mp3" or self.format == "flac" or self.format == "wav" or self.format == "m4a":
                 stream = yt.streams.get_audio_only()
             else:
@@ -95,7 +96,12 @@ class DownloadWidget(QWidget):
         self.url = url
         self.format = format
         self.layout = layout
-        self.setObjectName("dlwidget")
+        self.setStyleSheet("""
+            QWidget {
+                border: 2px solid #4e8df5;
+                border-radius: 4px;
+            }
+        """)
         self.setContentsMargins(0, 0, 0, 0)
         self.init_ui()
 
@@ -120,10 +126,12 @@ class DownloadWidget(QWidget):
         layout.addWidget(self.progress)
 
         # Bouton d'annulation
-        self.cancel_button = QPushButton('X', self)
+        self.cancel_button = QPushButton()
+        self.cancel_button.setIcon(QIcon('close.png'))
+        self.cancel_button.setFixedHeight(50)
+        self.cancel_button.setFixedWidth(30)
         self.cancel_button.clicked.connect(self.cancel_download)
         layout.addWidget(self.cancel_button)
-
         self.setLayout(layout)
 
     def cancel_download(self):
@@ -151,6 +159,51 @@ class DownloadWidget(QWidget):
     resized = pyqtSignal()
 
 
+class HoverLineEdit(QLineEdit):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        # Styles par défaut
+        self.apply_normal_style()
+
+    def apply_normal_style(self):
+        self.setStyleSheet("""
+            QLineEdit {
+                background-color: #4e8df5;
+                color: #ffffff;
+                font-weight: bold;
+                text-transform: uppercase;
+                border: 0px;
+            }
+        """)
+
+    def apply_hover_style(self):
+        self.setStyleSheet("""
+            QLineEdit {
+                background-color: #ff6b6b;
+                color: #ffffff;
+                font-weight: bold;
+                text-transform: uppercase;
+                border: 0px;
+            }
+        """)
+
+
+class HoverComboBox(QComboBox):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setEditable(True)
+        self.setLineEdit(HoverLineEdit())
+        self.addItems(["MP4", "MOV", "AVI", "WMV", "FLV", "WEBM", "MP3", "WAV", "M4A", "FLAC"])
+
+    def enterEvent(self, event):
+        self.lineEdit().apply_hover_style()
+        super().enterEvent(event)
+
+    def leaveEvent(self, event):
+        self.lineEdit().apply_normal_style()
+        super().leaveEvent(event)
+
+
 class App(QWidget):
     def __init__(self):
         super().__init__()
@@ -160,57 +213,94 @@ class App(QWidget):
         self.workers = []
 
     def initUI(self):
+        self.setContentsMargins(40, 0, 40, 20)
         self.layout = QVBoxLayout(self)
+        center_widget = QWidget()
+        layout = QVBoxLayout()
+
+        self.title_label = QLabel("YouTube Downloader")
+        self.title_label.setObjectName("title")
+        self.title_label.setAlignment(Qt.AlignCenter)
+        self.title_label.setFont(QFont('Arial', 25))
+
+        layout.addWidget(self.title_label)
 
         top_layout = QHBoxLayout()
         self.url_input = QLineEdit(self)
+        self.url_input.setFixedWidth(int(center_widget.width() * 0.8))
+        self.resized.connect(lambda: self.url_input.setFixedWidth(int(center_widget.width() * 0.8)))
         self.url_input.setPlaceholderText("Enter YouTube URL here")
         top_layout.addWidget(self.url_input)
 
-        self.format_combo = QComboBox(self)
+        self.format_combo = HoverComboBox(self)
+        self.format_combo.setFixedWidth(int(center_widget.width() * 0.15))
+        self.resized.connect(lambda: self.format_combo.setFixedWidth(int(center_widget.width() * 0.15)))
+        self.format_combo.setObjectName("button-primary")
+        self.format_combo.setEditable(True)
+        self.format_combo.setLineEdit(HoverLineEdit())
         self.format_combo.addItems(["MP4", "MOV", "AVI", "WMV", "FLV", "WEBM", "MP3", "WAV", "M4A", "FLAC"])
-        top_layout.addWidget(self.format_combo)
-        self.layout.addLayout(top_layout)
+        line_edit = self.format_combo.lineEdit()
+        line_edit.setAlignment(Qt.AlignCenter)
+        line_edit.setReadOnly(True)
+        top_layout.addWidget(self.format_combo, alignment=Qt.AlignRight)
+        layout.addLayout(top_layout)
 
-        self.save_path_button = QPushButton("Choose save folder", self)
-        self.update_save_path_button()
-        self.save_path_button.clicked.connect(self.choose_save_path)
-        self.layout.addWidget(self.save_path_button)
+        mid_layout = QHBoxLayout()
+        self.path_input = QLineEdit(self)
+        self.path_input.setFixedWidth(int(center_widget.width() * 0.8))
+        self.resized.connect(lambda: self.path_input.setFixedWidth(int(center_widget.width() * 0.8)))
+        self.path_input.setPlaceholderText("Folder: C:/Users/.../DownloadsYT")
+        if self.settings["save_path"]:
+            self.path_input.setText(self.settings["save_path"])
+        mid_layout.addWidget(self.path_input)
+
+        self.path_input_button = QPushButton("Choose")
+        self.path_input_button.setFixedWidth(int(center_widget.width() * 0.15))
+        self.resized.connect(lambda: self.path_input_button.setFixedWidth(int(center_widget.width() * 0.15)))
+        self.path_input_button.setObjectName("button-primary")
+        self.path_input_button.clicked.connect(self.choose_save_path)
+        mid_layout.addWidget(self.path_input_button, alignment=Qt.AlignRight)
+        layout.addLayout(mid_layout)
 
         # Création d'une zone défilable pour les téléchargements
         self.scroll_area = QScrollArea(self)
         self.scroll_widget = QWidget()
+        self.scroll_widget.setContentsMargins(0, 0, 0, 0)
         self.scroll_layout = QVBoxLayout(self.scroll_widget)
+        self.scroll_layout.setSpacing(0)
         self.scroll_widget.setLayout(self.scroll_layout)
         self.scroll_area.setWidgetResizable(True)
         self.scroll_area.setWidget(self.scroll_widget)
-        self.layout.addWidget(self.scroll_area)
+        layout.addWidget(self.scroll_area)
 
         self.download_button = QPushButton("Download", self)
+        self.download_button.setObjectName("button-primary")
         self.download_button.clicked.connect(self.start_download)
-        self.layout.addWidget(self.download_button)
-
-        self.theme_button = QPushButton("Switch to Dark Mode", self)
-        self.theme_button.clicked.connect(self.toggle_theme)
-        self.layout.addWidget(self.theme_button)
+        layout.addWidget(self.download_button)
 
         self.threadpool = QThreadPool()
         print("Multithreading with maximum %d threads" % self.threadpool.maxThreadCount())
 
+        center_widget.setLayout(layout)
+        self.layout.addWidget(center_widget)
         self.setWindowTitle('YouTube Downloader')
         self.setWindowIcon(QIcon(icon_path))
         self.setMinimumSize(1000, 500)
         self.apply_theme()
 
-    def update_save_path_button(self):
-        if self.settings['save_path']:
-            self.save_path_button.setText(f"Folder: {self.settings['save_path']}")
-        else:
-            self.save_path_button.setText("Choose save folder")
+    # Personnalisation de la méthode 'resizeEvent' pour émettre un signal 'resized'
+    def resizeEvent(self, event):
+        super(App, self).resizeEvent(event)
+        self.resized.emit()
+
+    resized = pyqtSignal()
 
     def choose_save_path(self):
-        self.settings['save_path'] = QFileDialog.getExistingDirectory(self, "Select Directory")
-        self.update_save_path_button()
+        new_path = QFileDialog.getExistingDirectory(self, "Select Directory")
+        if not new_path or new_path == '':
+            return
+        self.settings['save_path'] = new_path
+        self.path_input.setText(new_path)
         self.save_settings()
 
     def cancel_download(self, url):
@@ -260,56 +350,58 @@ class App(QWidget):
             with open(setting_path, 'r') as f:
                 self.settings = json.load(f)
         except (FileNotFoundError, json.JSONDecodeError):
-            self.settings = {'dark_mode': False, 'save_path': '', 'counts': {'mp3': 0, 'mp4': 0, 'total': 0}}
+            self.settings = {'save_path': ''}
 
     def save_settings(self):
         with open(setting_path, 'w') as f:
             json.dump(self.settings, f)
 
-    def toggle_theme(self):
-        self.settings['dark_mode'] = not self.settings['dark_mode']
-        self.save_settings()
-        self.apply_theme()
-
     def apply_theme(self):
-        dark_mode = self.settings['dark_mode']
-        text_color = "#D0D0D0" if dark_mode else "#333333"
-        bg_color = "#1E1E1E" if dark_mode else "#FAFAFA"
-        element_bg = "#252526" if dark_mode else "#FFFFFF"
-        bbg_color = "#3A3A3C" if dark_mode else "#F0F0F0"
-        bhover_color = "#575759" if dark_mode else "#E0E0E0"
-        border_color = "rgba(255, 255, 255, 0.15)" if dark_mode else "rgba(0, 0, 0, 0.1)"
-        button_shadow = "rgba(0, 0, 0, 0.4)" if dark_mode else "rgba(0, 0, 0, 0.1)"
-        font_size = "16px"  # Taille de police générale
-        button_font_size = "14px"  # Taille de police pour les boutons
-        border_radius = "5px"  # Rayon de bordure pour les champs arrondis
+        url_arrow_path = arrow_path.replace('\\', "/")
         self.setStyleSheet(f"""
+            #title {{
+                display: block;
+                padding: 30px;
+                font-weight: bold;
+            }}
+            
             QWidget {{
-                font-family: 'Arial', sans-serif;
-                font-size: {font_size};
-                color: {text_color};
-                background-color: {bg_color};
+                font-family: 'Segoe UI', sans-serif;
+                background-color: #2a2d34;
+                color: #ffffff;
+            }}
+    
+            QLineEdit:focus {{
+                border-color: #2a2d34;
+                box-shadow: 0 0 8px #ff6b6b;
+            }}
+            
+            QComboBox, QLineEdit, QPushButton, QScrollArea {{
+                border: 2px solid #4e8df5;
+                border-radius: 4px;
                 padding: 10px;
+                margin: 10px 0;
+                background-color: #2a2d34;
+                color: #ffffff;
+                transition: border-color 0.3s, box-shadow 0.3s;
             }}
-            QLineEdit, QComboBox, QPushButton, QLabel {{
-                border: 1px solid {border_color};
-                border-radius: {border_radius};
-                padding: 10px;
-                margin: 10px;
-                background: {element_bg};
+    
+            #button-primary {{
+                background-color: #4e8df5;
+                color: #ffffff;
+                font-weight: bold;
+                text-transform: uppercase;
             }}
-            QPushButton {{
-                font-size: {button_font_size};
-                background-color: {bbg_color};
-                box-shadow: 0 2px 5px {button_shadow};
+    
+            #button-primary:hover {{
+                background-color: #ff6b6b;
+                border-color: #2a2d34;
             }}
-            QPushButton:hover {{
-                background-color: {bhover_color};
-            }}
+            
             QComboBox::down-arrow {{
-                image: url({arrow_path});
-                width: 10px;
-                height: 10px;
+                image: url({url_arrow_path});
+                width: 20px;
+                height: 20px;
                 margin: auto;
             }}
             QComboBox::drop-down {{
@@ -326,20 +418,8 @@ class App(QWidget):
             QProgressBar::chunk {{
                 background-color: #05B8CC;
                 border-radius :15px;
-            }}  
-            QWidget#dlwidget 
-            {{
-                margin: 0px 0px 0px 0px;
-                padding: 0px 0px 0px 0px;
-                border: pink;
-                border-radius: 15px;
-                background-color: pink;
             }}
         """)
-        if self.settings['dark_mode']:
-            self.theme_button.setText("Switch to Light Mode")
-        else:
-            self.theme_button.setText("Switch to Dark Mode")
 
 
 def load_data():
