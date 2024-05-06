@@ -1,6 +1,5 @@
 import os
 import time
-import traceback
 from urllib.error import URLError, HTTPError
 
 from PyQt5.QtCore import QObject, pyqtSignal, QRunnable, pyqtSlot
@@ -15,7 +14,7 @@ downloading_urls = []
 
 
 def get_downloading_worker(url, format="any"):
-    for worker in workers:  # Parcourir tous les travailleurs pour trouver celui qui correspond à l'URL
+    for worker in workers:
         if format.lower() == "any":
             has_format = True
         else:
@@ -63,15 +62,15 @@ class Worker(QRunnable):
                 stream = yt.streams.get_audio_only()
             else:
                 stream = yt.streams.get_highest_resolution()
-            filesize = stream.filesize  # get the video size
+            filesize = stream.filesize
             title = sanitize_filename(yt.title, strict_cleaning=True) + "." + self.format.name
             with open(self.save_path + "\\" + title, 'wb') as out_file:
-                stream = request.stream(stream.url)  # get an iterable stream
+                stream = request.stream(stream.url)
                 downloaded = 0
                 while True:
                     if self.is_cancelled:
                         break
-                    chunk = next(stream, None)  # get next chunk of video
+                    chunk = next(stream, None)
                     if chunk:
                         out_file.write(chunk)
                         downloaded += len(chunk)
@@ -82,7 +81,6 @@ class Worker(QRunnable):
             self.signals.download_complete.emit()
             while notification_active(): time.sleep(0.1)
             if self.is_cancelled:
-                # Supprimer le fichier si le téléchargement est annulé
                 os.remove(self.save_path + "\\" + yt.title + "." + self.format.name)
                 show_toast("Download cancelled", "Video '" + yt.title + "' download was cancelled")
             else:

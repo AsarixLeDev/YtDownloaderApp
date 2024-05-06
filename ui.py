@@ -35,7 +35,6 @@ class DownloadWidget(QWidget):
 
         video_name = YouTube(self.url).title
 
-        # Nom de la vidéo
         self.video_label = QLabel(video_name)  # Ici, on pourrait extraire le titre avec youtube_dl si nécessaire
         self.video_label.setFixedWidth(int(self.width() * 0.5))  # 50% de la largeur du parent
         self.video_label.setFixedHeight(60)
@@ -45,19 +44,16 @@ class DownloadWidget(QWidget):
                     }
                 """)
 
-        # Connecter le signal 'resized' du QWidget parent à une fonction pour ajuster la largeur du QLabel
         self.resized.connect(lambda: self.video_label.setFixedWidth(int(self.width() * 0.5)))
         self.video_label.setWordWrap(False)
         layout.addWidget(self.video_label)
 
-        # Barre de progression
         self.progress = QProgressBar(self)
         self.progress.setFixedWidth(int(self.width() * 0.5) - 70)
         self.resized.connect(lambda: self.progress.setFixedWidth(int(self.width() * 0.5) - 70))
         self.progress.setAlignment(Qt.AlignCenter)
         layout.addWidget(self.progress)
 
-        # Bouton d'annulation
         self.cancel_button = QPushButton()
         self.cancel_button.setIcon(QIcon(data.close_path))
         self.cancel_button.setFixedHeight(50)
@@ -77,12 +73,12 @@ class DownloadWidget(QWidget):
 
     def cancel_download(self):
         try:
-            self.cancel_signal.emit(self.url)  # Envoie un signal pour annuler le téléchargement
-            self.layout.removeWidget(self.progress)  # Supprime le widget de la mise en page
-            self.layout.removeWidget(self.video_label)  # Supprime le widget de la mise en page
-            self.layout.removeWidget(self.cancel_button)  # Supprime le widget de la mise en page
-            self.layout.removeWidget(self)  # Supprime le widget de la mise en page
-            self.deleteLater()  # Supprime le widget de la mémoire
+            self.cancel_signal.emit(self.url)
+            self.layout.removeWidget(self.progress)
+            self.layout.removeWidget(self.video_label)
+            self.layout.removeWidget(self.cancel_button)
+            self.layout.removeWidget(self)
+            self.deleteLater()
         except Exception as e:
             print(e)
 
@@ -92,7 +88,6 @@ class DownloadWidget(QWidget):
         except Exception as e:
             print(e)
 
-    # Personnalisation de la méthode 'resizeEvent' pour émettre un signal 'resized'
     def resizeEvent(self, event):
         super(DownloadWidget, self).resizeEvent(event)
         self.resized.emit()
@@ -106,7 +101,6 @@ class DownloadWidget(QWidget):
 class HoverLineEdit(QLineEdit):
     def __init__(self, parent=None):
         super().__init__(parent)
-        # Styles par défaut
         self.apply_normal_style()
 
     def apply_normal_style(self):
@@ -204,7 +198,6 @@ class App(QWidget):
         mid_layout.addWidget(self.path_input_button, alignment=Qt.AlignRight)
         layout.addLayout(mid_layout)
 
-        # Création d'une zone défilable pour les téléchargements
         self.scroll_area = QScrollArea(self)
         self.scroll_widget = QWidget()
         self.scroll_widget.setContentsMargins(0, 0, 0, 0)
@@ -230,7 +223,6 @@ class App(QWidget):
         self.setMinimumSize(1000, 500)
         frontend.apply_theme(self)
 
-    # Personnalisation de la méthode 'resizeEvent' pour émettre un signal 'resized'
     def resizeEvent(self, event):
         super(App, self).resizeEvent(event)
         self.resized.emit()
