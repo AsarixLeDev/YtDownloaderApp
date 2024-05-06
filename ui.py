@@ -1,4 +1,3 @@
-import logging
 import re
 
 from PyQt5.QtCore import pyqtSignal, QThreadPool, Qt
@@ -8,9 +7,9 @@ from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QPushButton, QLineEdit, QLabe
 from pytube import YouTube
 
 from YtDownloaderApp import frontend, file_formats
-from YtDownloaderApp.data import data
-from YtDownloaderApp.funcs import show_toast
 from YtDownloaderApp import workers
+from YtDownloaderApp.data import data
+from YtDownloaderApp.funcs import show_toast, get_youtube_content
 
 
 class DownloadWidget(QWidget):
@@ -32,6 +31,7 @@ class DownloadWidget(QWidget):
 
     def init_ui(self):
         layout = QHBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
 
         video_name = YouTube(self.url).title
 
@@ -39,6 +39,11 @@ class DownloadWidget(QWidget):
         self.video_label = QLabel(video_name)  # Ici, on pourrait extraire le titre avec youtube_dl si nécessaire
         self.video_label.setFixedWidth(int(self.width() * 0.5))  # 50% de la largeur du parent
         self.video_label.setFixedHeight(60)
+        self.video_label.setStyleSheet("""
+                    QLabel {
+                        font-size: 20px;
+                    }
+                """)
 
         # Connecter le signal 'resized' du QWidget parent à une fonction pour ajuster la largeur du QLabel
         self.resized.connect(lambda: self.video_label.setFixedWidth(int(self.width() * 0.5)))
@@ -47,7 +52,9 @@ class DownloadWidget(QWidget):
 
         # Barre de progression
         self.progress = QProgressBar(self)
-        self.progress.setValue(0)
+        self.progress.setFixedWidth(int(self.width() * 0.5) - 70)
+        self.resized.connect(lambda: self.progress.setFixedWidth(int(self.width() * 0.5) - 70))
+        self.progress.setAlignment(Qt.AlignCenter)
         layout.addWidget(self.progress)
 
         # Bouton d'annulation
@@ -56,6 +63,15 @@ class DownloadWidget(QWidget):
         self.cancel_button.setFixedHeight(50)
         self.cancel_button.setFixedWidth(30)
         self.cancel_button.clicked.connect(self.cancel_download)
+        self.cancel_button.setStyleSheet("""
+                    QPushButton {
+                        border: 0px;
+                    }
+                    QPushButton:hover {
+                        background-color: #ff6b6b;
+                        border-color: #2a2d34;
+                    }
+                """)
         layout.addWidget(self.cancel_button)
         self.setLayout(layout)
 
@@ -219,6 +235,9 @@ class App(QWidget):
         super(App, self).resizeEvent(event)
         self.resized.emit()
 
+    def closeEvent(self, a0):
+        data.save_settings()
+
     resized = pyqtSignal()
 
     def choose_save_path(self):
@@ -239,23 +258,24 @@ class App(QWidget):
         if not data.save_folder_path:
             show_toast("No Save folder", "No save folder was provided. Please select one.")
             return
+
+        format_str = self.format_combo.currentText().lower()
+        format = file_formats.get_format(format_str)
+        for yt_url in get_youtube_content(url):
+            self.download_video(yt_url, format)
+
+    def download_video(self, url, format):
         if workers.is_downloading(url):
             show_toast("URL already being downloaded",
                        "The url you specified is already being downloaded. Please wait !")
             return
-
-        format = self.format_combo.currentText().lower()
         download_widget = DownloadWidget(url, format, self.scroll_layout)
         self.scroll_layout.addWidget(download_widget)
-        download_widget.cancel_signal.connect(self.cancel_download)
-        self.download_video(download_widget)
-
-    def download_video(self, download_widget):
         url = download_widget.url
-        format = download_widget.format
         save_path = data.save_folder_path
         worker = workers.Worker(url, format, save_path)
         worker.signals.progress_updated.connect(download_widget.update_progress)
         worker.signals.download_complete.connect(lambda: download_widget.update_progress(100))
         worker.signals.download_error.connect(download_widget.handle_download_error)
+        download_widget.cancel_signal.connect(worker.cancel)
         self.threadpool.start(worker)

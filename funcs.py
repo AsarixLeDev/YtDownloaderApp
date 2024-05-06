@@ -1,6 +1,7 @@
 import re
 
 import unicodedata
+from pytube import YouTube, Playlist
 from win10toast import ToastNotifier
 
 from YtDownloaderApp.data import data
@@ -44,3 +45,28 @@ def show_toast(title, subtitle):
 
 def notification_active():
     return toast.notification_active()
+
+
+def get_youtube_content(url):
+    # Check if the URL contains a playlist ID
+    if 'list=' in url:
+        try:
+            # Handle as a playlist
+            playlist = Playlist(url)
+            # Check if the playlist has any videos
+            if not playlist.video_urls:
+                return [url]
+
+            # Return all video URLs from the playlist
+            return [video for video in playlist.video_urls]
+        except Exception:
+            return [url]
+
+    try:
+        # Try to create a YouTube object
+        yt = YouTube(url)
+        # If creation is successful, return the video URL
+        return [yt.watch_url]
+    except Exception:
+        # Handle generic exceptions
+        return [url]

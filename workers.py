@@ -1,6 +1,6 @@
 import os
-import re
 import time
+import traceback
 from urllib.error import URLError, HTTPError
 
 from PyQt5.QtCore import QObject, pyqtSignal, QRunnable, pyqtSlot
@@ -9,7 +9,6 @@ from pytube.exceptions import RegexMatchError, VideoUnavailable
 
 from YtDownloaderApp.file_formats import FileFormat, FileType
 from YtDownloaderApp.funcs import sanitize_filename, notification_active, show_toast
-
 
 workers = []
 downloading_urls = []
@@ -46,8 +45,8 @@ class Worker(QRunnable):
 
     def __init__(self, url, format: FileFormat, save_path):
         super().__init__()
-        self.url = url
-        downloading_urls.append(url)
+        self.url = str(url)
+        downloading_urls.append(self.url)
         self.format = format
         self.save_path = save_path
         self.is_cancelled = False
@@ -107,34 +106,6 @@ class Worker(QRunnable):
             self.signals.download_error.emit(error_title, error_subtitle)
             show_toast(error_title, error_subtitle)
         workers.remove(self)
-
-    def download_youtube_video(self, url, path):
-        """Download a video from YouTube while handling common exceptions."""
-
-        # Check if the URL is a valid YouTube URL
-        if not re.match(r'^(https?://)?(www\.)?(youtube\.com|youtu\.?be)/', url):
-            return "Error: Invalid YouTube URL."
-
-        try:
-            # Create YouTube object
-            yt = YouTube(url)
-
-            # Select the first stream; if you need a specific stream, filter by mime_type, resolution, etc.
-            stream = yt.streams.first()
-
-            # Download the video
-            stream.download(output_path=path)
-
-            return "Download successful!"
-        except RegexMatchError:
-            return "Error: Failed to parse YouTube URL."
-        except VideoUnavailable:
-            return "Error: Video is unavailable."
-        except (URLError, HTTPError) as e:
-            return f"Network Error: {e.reason}"
-        except Exception as e:
-            # Catch-all for any other unforeseen errors
-            return f"An unexpected error occurred: {str(e)}"
 
     def cancel(self):
         self.is_cancelled = True

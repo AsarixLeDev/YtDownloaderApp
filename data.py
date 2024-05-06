@@ -25,13 +25,18 @@ class Data:
         self.arrow_path = os.path.join(base_path, 'resources/images/img.png')
         try:
             with open(self.setting_path, 'r') as f:
-                self.settings = json.load(f)
+                json_data = json.load(f)
+                if "save_path" in json_data:
+                    self.save_folder_path = json_data["save_path"]
         except (FileNotFoundError, json.JSONDecodeError):
             self.settings = {'save_path': ''}
 
     def save_settings(self):
+        settings = {}
+        if self.save_folder_path:
+            settings["save_path"] = self.save_folder_path
         with open(self.setting_path, 'w') as f:
-            json.dump(self.settings, f)
+            json.dump(settings, f)
 
 
 data = Data()

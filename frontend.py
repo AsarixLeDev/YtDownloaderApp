@@ -55,15 +55,14 @@ def apply_theme(widget):
             subcontrol-position: top right;
             width: 20px;
         }}
-        QProgressBar {{
+        /*QProgressBar {{
             border: 2px solid #4e8df5;
-            border-radius: 4px;
-            background-color: #2a2d34;
-        }}
+            border-radius: 8px;
+        }}*/
 
         QProgressBar::chunk {{
             background-color: #05B8CC;
-            border-radius: 4px; /* Match the border radius of the progress bar itself */
+            /*border-radius: 4px;*/ /* Match the border radius of the progress bar itself */
         }}
 
         QLabel {{

@@ -5,6 +5,12 @@ def get_formats_str():
     return [format.name for format in formats]
 
 
+def get_format(format_str: str):
+    for format in formats:
+        if format.name.lower() == format_str.lower():
+            return format
+
+
 class FileType:
     Video = 0
     Audio = 1
